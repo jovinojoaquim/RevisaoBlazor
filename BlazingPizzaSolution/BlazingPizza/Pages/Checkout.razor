@@ -1,0 +1,71 @@
+﻿@page "/checkout"
+@using BlazingPizza.Model.Core
+@using BlazingPizza.Services
+@using Microsoft.AspNetCore.Components
+@inject OrderState OrderState
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<div class="main" >
+    <EditForm EditContext="editContext" OnValidSubmit="PlaceOrder" OnInvalidSubmit="ShowError">
+
+        <div class="checkout-cols">
+            <div class="checkout-order-details">
+                <h4>Review Order</h4>
+                <OrderReview Order="Order" />
+            </div>
+
+            <div class="checkout-delivery-address">
+                <h4>Deliver to...</h4>
+                <AddressEditor Address="Order.DeliveryAddress" />
+            </div>
+        </div>
+
+        <button class="checkout-button btn btn-warning" disabled=@isError>
+            Place Order
+        </button>
+        <DataAnnotationsValidator />
+    </EditForm>
+</div>
+
+@code {
+    Order Order => OrderState.Order;
+    bool isError = false;
+    EditContext editContext;
+
+    protected override void OnInitialized()
+    {
+        editContext = new(Order.DeliveryAddress);
+        editContext.OnFieldChanged += HandleFieldChanged;
+    }
+
+    private void HandleFieldChanged(object sender, FieldChangedEventArgs e){
+        isError = !editContext.Validate();
+        StateHasChanged();
+    }
+
+    async Task PlaceOrder()
+    {        
+        var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "orders", OrderState.Order);
+        if (response.IsSuccessStatusCode)
+        {
+            var newOrderId = await response.Content.ReadFromJsonAsync<int>();
+            OrderState.ResetOrder();
+            NavigationManager.NavigateTo($"/myorders/{newOrderId}");
+        }
+        else
+        {
+            var rawContent = await response.Content.ReadAsStringAsync();
+            Console.Error.WriteLine($"Erro ao enviar pedido: {response.StatusCode} - {rawContent}");
+        }
+    }
+    private void ShowError(EditContext args)
+    {
+        isError = true;
+    }
+
+    public void Dispose(){
+        editContext.OnFieldChanged  -= HandleFieldChanged;
+    }
+}
